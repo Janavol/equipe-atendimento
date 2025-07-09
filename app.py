@@ -67,3 +67,4 @@ if not st.session_state.dados.empty:
             title=f"Desempenho de {row['Nome']}"
         )
         st.plotly_chart(fig, use_container_width=True)
+ 
