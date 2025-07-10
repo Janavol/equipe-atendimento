@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+from fpdf import FPDF
+import base64
+import io
 
 st.set_page_config(layout="wide")
 
@@ -84,34 +87,82 @@ with col_esquerda:
 with col_direita:
     st.header("Radar de Performance")
     dados = st.session_state.dados_colaboradoras.get(chave, [])
-    for registro in dados:
-        nome = registro["Nome"]
-        atendimentos = registro["Atendimentos"]
-        tempo = registro["Tempo Médio (min)"]
-        erros = registro["Erros"]
 
-        if atendimentos == 0:
-            produtividade = 0
-        else:
-            produtividade = min(atendimentos / 100, 1) * 100
+    if dados:
+        relatorio_final = []
+        for registro in dados:
+            nome = registro["Nome"]
+            atendimentos = registro["Atendimentos"]
+            tempo = registro["Tempo Médio (min)"]
+            erros = registro["Erros"]
 
-        eficiencia = max(0, 100 - tempo * 10)
-        qualidade = max(0, 100 - erros * 20)
+            if atendimentos == 0:
+                produtividade = 0
+            else:
+                produtividade = min(atendimentos / 100, 1) * 100
 
-        performance = (produtividade + eficiencia + qualidade) / 3
+            eficiencia = max(0, 100 - tempo * 10)
+            qualidade = max(0, 100 - erros * 20)
+            performance = (produtividade + eficiencia + qualidade) / 3
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(
-            r=[produtividade, eficiencia, qualidade, produtividade],
-            theta=["Produtividade", "Eficiência", "Qualidade", "Produtividade"],
-            fill='toself',
-            name=nome
-        ))
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100])
-            ),
-            showlegend=True,
-            title=f"Desempenho de {nome}"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+            # Adiciona título com mês e ano
+            st.subheader(f"{datetime(ano, mes, 1).strftime('%B %Y')} - {nome}")
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=[produtividade, eficiencia, qualidade, produtividade],
+                theta=["Produtividade", "Eficiência", "Qualidade", "Produtividade"],
+                fill='toself',
+                name=nome
+            ))
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 100])
+                ),
+                showlegend=True,
+                title=f"Desempenho de {nome}"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Análise de capacitação
+            necessidades = []
+            if produtividade < 70:
+                necessidades.append("produtividade")
+            if eficiencia < 70:
+                necessidades.append("eficiência")
+            if qualidade < 70:
+                necessidades.append("qualidade")
+
+            if necessidades:
+                st.markdown(f"<b>{nome}:</b> necessita de capacitação em {', '.join(necessidades)}.", unsafe_allow_html=True)
+                relatorio_final.append(f"{nome}, capacitação em {', '.join(necessidades)}")
+
+        # Exibir relatório geral
+        if relatorio_final:
+            st.subheader("Relatório Geral de Capacitação")
+            st.markdown(f"Com base nos dados analisados durante o mês de <b>{datetime(ano, mes, 1).strftime('%B de %Y')}</b>, necessitam de aperfeiçoamento os seguintes colaboradores:", unsafe_allow_html=True)
+            for linha in relatorio_final:
+                st.markdown(f"- {linha}")
+
+        # Gerar PDF da tabela e gráficos (apenas dados)
+        if st.button("Exportar dados para PDF"):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            pdf.cell(200, 10, txt=f"Relatório de Desempenho - {datetime(ano, mes, 1).strftime('%B/%Y')}", ln=True, align='C')
+            pdf.ln(10)
+
+            for reg in dados:
+                pdf.cell(200, 10, txt=f"{reg['Nome']}: Atendimentos={reg['Atendimentos']}, Tempo Médio={reg['Tempo Médio (min)']:.2f} min, Erros={reg['Erros']}", ln=True)
+
+            if relatorio_final:
+                pdf.ln(10)
+                pdf.cell(200, 10, txt="Colaboradores que necessitam capacitação:", ln=True)
+                for linha in relatorio_final:
+                    pdf.cell(200, 10, txt=f"- {linha}", ln=True)
+
+            buffer = io.BytesIO()
+            pdf.output(buffer)
+            b64 = base64.b64encode(buffer.getvalue()).decode()
+            href = f'<a href="data:application/pdf;base64,{b64}" download="relatorio_{chave}.pdf">Clique aqui para baixar o PDF</a>'
+            st.markdown(href, unsafe_allow_html=True)
