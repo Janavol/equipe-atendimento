@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Dashboard de Performance", layout="wide")
 
 st.title("Painel de Performance da Equipe de Atendimento")
+st.write("✅ App carregado com sucesso!")
 
 # Formulário de entrada de dados
 with st.sidebar.form(key='formulario'):
