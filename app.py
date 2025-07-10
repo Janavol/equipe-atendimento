@@ -3,75 +3,87 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
-# ----- CONFIGURAÇÕES INICIAIS -----
-st.set_page_config(page_title="Painel de Performance", layout="wide")
-st.sidebar.title("Preenchimento de Dados")
+st.set_page_config(layout="wide")
 
-# ----- LISTAS E VARIÁVEIS -----
-colaboradoras = [f"Colab_{i}" for i in range(1, 21)]  # Até 20 colaboradoras
-anos_disponiveis = list(range(2024, datetime.now().year + 1))
-meses_disponiveis = {
-    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
-    "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
-}
+# Título principal
+st.title("Painel de Desempenho da Equipe de Atendimento")
 
-# ----- ENTRADAS -----
-colab_nome = st.sidebar.selectbox("Selecione a colaboradora", colaboradoras)
-ano_selecionado = st.sidebar.selectbox("Ano", anos_disponiveis, index=len(anos_disponiveis)-1)
-mes_selecionado = st.sidebar.selectbox("Mês", list(meses_disponiveis.keys()), index=datetime.now().month-1)
+# Sidebar para seleção de período
+with st.sidebar:
+    st.header("Selecione o Período")
+    ano = st.selectbox("Ano", list(range(2023, datetime.today().year + 1)), index=1)
+    mes = st.selectbox("Mês", ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], index=int(datetime.today().month) - 1)
+    st.markdown("---")
+    st.subheader("Preenchimento dos Dados")
 
-# Entrada de dados
-atendimentos = st.sidebar.number_input("Nº de Atendimentos", min_value=0, step=1)
-tempo_medio = st.sidebar.number_input("Tempo Médio por Atendimento (min)", min_value=0.0, step=0.1)
-erros = st.sidebar.number_input("Nº de Erros", min_value=0, step=1)
+# Lista para armazenar os dados
+colaboradoras = []
 
-# Botão para enviar
-if st.sidebar.button("Salvar Dados"):
-    dados = {
-        "Ano": ano_selecionado,
-        "Mês": mes_selecionado,
-        "Colaboradora": colab_nome,
-        "Atendimentos": atendimentos,
-        "Tempo Médio": tempo_medio,
-        "Erros": erros
-    }
-    st.session_state.setdefault("dados", []).append(dados)
-    st.sidebar.success("Dados salvos!")
+# Função para conversão de HH:MM em minutos decimais
+def tempo_para_minutos(tempo):
+    try:
+        if ":" in tempo:
+            partes = tempo.split(":")
+            horas = int(partes[0])
+            minutos = int(partes[1])
+            return horas * 60 + minutos
+        else:
+            return float(tempo)
+    except:
+        return 0
 
-# ----- ANÁLISE -----
-st.title("Painel de Performance da Equipe de Atendimento")
+# Layout alternado para 25 colaboradoras
+for i in range(25):
+    cor_fundo = "#4F4F4F" if i % 2 == 0 else "#D3D3D3"
+    cor_texto = "white" if i % 2 == 0 else "black"
 
-if "dados" not in st.session_state or not st.session_state["dados"]:
-    st.info("Nenhum dado registrado ainda.")
-else:
-    df = pd.DataFrame(st.session_state["dados"])
+    with st.container():
+        st.markdown(f"""
+            <div style='background-color: {cor_fundo}; padding: 15px; border-radius: 10px;'>
+                <h4 style='color: {cor_texto};'>Colab. {i+1}</h4>
+        """, unsafe_allow_html=True)
 
-    # Filtro por mês e ano
-    df_filtrado = df[(df["Ano"] == ano_selecionado) & (df["Mês"] == mes_selecionado)]
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            nome = st.text_input(f"Nome {i+1}", key=f"nome_{i}")
+        with col2:
+            atendimentos = st.number_input(f"Nro. de atendimentos {i+1}", min_value=0, key=f"atend_{i}")
+        with col3:
+            tempo = st.text_input(f"Tempo médio (hh:mm) {i+1}", key=f"tempo_{i}")
+        erros = st.number_input(f"Quantidade de erros {i+1}", min_value=0, key=f"erros_{i}")
 
-    if df_filtrado.empty:
-        st.warning("Nenhum dado para este período.")
-    else:
-        for nome in df_filtrado["Colaboradora"].unique():
-            colab_df = df_filtrado[df_filtrado["Colaboradora"] == nome]
+        tempo_convertido = tempo_para_minutos(tempo)
 
-            # Métricas
-            produtividade = colab_df["Atendimentos"].mean()
-            eficiencia = 100 - colab_df["Tempo Médio"].mean()
-            qualidade = max(0, 100 - (colab_df["Erros"].mean() * 10))
-            performance_final = (produtividade + eficiencia + qualidade) / 3
+        if nome:
+            produtividade = atendimentos
+            eficiencia = (atendimentos / tempo_convertido) * 60 if tempo_convertido > 0 else 0
+            qualidade = 100 - ((erros / atendimentos) * 100) if atendimentos > 0 else 100
+            performance = (produtividade * 0.4) + (eficiencia * 0.3) + (qualidade * 0.3)
 
-            # Radar chart
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(
-                r=[produtividade, eficiencia, qualidade, performance_final],
-                theta=["Produtividade", "Eficiência", "Qualidade", "Performance Final"],
-                fill='toself',
-                name=nome
-            ))
-            fig.update_layout(
-                polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-                showlegend=True,
-                title=f"Performance - {nome} ({mes_selecionado}/{ano_selecionado})"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            colaboradoras.append({
+                "Nome": nome,
+                "Produtividade": round(produtividade, 2),
+                "Eficiência": round(eficiencia, 2),
+                "Qualidade": round(qualidade, 2),
+                "Performance Final": round(performance, 2)
+            })
+
+        st.markdown("</div><br>", unsafe_allow_html=True)
+
+# Exibir os gráficos de radar se houver dados
+if colaboradoras:
+    st.subheader("Desempenho Individual")
+    for colaboradora in colaboradoras:
+        fig = go.Figure()
+        fig.add_trace(go.Scatterpolar(
+            r=[colaboradora["Produtividade"], colaboradora["Eficiência"], colaboradora["Qualidade"], colaboradora["Performance Final"]],
+            theta=["Produtividade", "Eficiência", "Qualidade", "Performance Final"],
+            fill='toself',
+            name=colaboradora["Nome"]
+        ))
+        fig.update_layout(polar=dict(radialaxis=dict(visible=True)), showlegend=True, title=colaboradora["Nome"])
+        st.plotly_chart(fig, use_container_width=True)
+
+    df = pd.DataFrame(colaboradoras)
+    st.subheader("Resumo Geral")
+    st.dataframe(df)
