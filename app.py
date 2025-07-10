@@ -5,85 +5,113 @@ from datetime import datetime
 
 st.set_page_config(layout="wide")
 
-# Título principal
-st.title("Painel de Desempenho da Equipe de Atendimento")
+st.markdown("""
+    <style>
+        .gray-dark {
+            background-color: #2e2e2e;
+            color: white;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        .gray-light {
+            background-color: #d3d3d3;
+            color: black;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        input {
+            border-radius: 5px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-# Sidebar para seleção de período
-with st.sidebar:
-    st.header("Selecione o Período")
-    ano = st.selectbox("Ano", list(range(2023, datetime.today().year + 1)), index=1)
-    mes = st.selectbox("Mês", ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], index=int(datetime.today().month) - 1)
-    st.markdown("---")
-    st.subheader("Preenchimento dos Dados")
+# Armazena dados na sessão por mês e ano
+if "dados_colaboradoras" not in st.session_state:
+    st.session_state.dados_colaboradoras = {}
 
-# Lista para armazenar os dados
-colaboradoras = []
+# Seleção de ano e mês
+col1, col2 = st.columns(2)
+with col1:
+    ano = st.selectbox("Selecione o ano:", [2025, 2026], key="ano")
+with col2:
+    mes = st.selectbox("Selecione o mês:", list(range(1, 13)), format_func=lambda m: datetime(2025, m, 1).strftime("%B"), key="mes")
 
-# Função para conversão de HH:MM em minutos decimais
-def tempo_para_minutos(tempo):
-    try:
-        if ":" in tempo:
-            partes = tempo.split(":")
-            horas = int(partes[0])
-            minutos = int(partes[1])
-            return horas * 60 + minutos
-        else:
-            return float(tempo)
-    except:
-        return 0
+chave = f"{ano}-{mes}"
 
-# Layout alternado para 25 colaboradoras
-for i in range(25):
-    cor_fundo = "#4F4F4F" if i % 2 == 0 else "#D3D3D3"
-    cor_texto = "white" if i % 2 == 0 else "black"
+# Inicializar dados do mês se não existir
+if chave not in st.session_state.dados_colaboradoras:
+    st.session_state.dados_colaboradoras[chave] = []
 
-    with st.container():
-        st.markdown(f"""
-            <div style='background-color: {cor_fundo}; padding: 15px; border-radius: 10px;'>
-                <h4 style='color: {cor_texto};'>Colab. {i+1}</h4>
-        """, unsafe_allow_html=True)
+st.title("Painel de Desempenho da Equipe")
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            nome = st.text_input(f"Nome {i+1}", key=f"nome_{i}")
-        with col2:
-            atendimentos = st.number_input(f"Nro. de atendimentos {i+1}", min_value=0, key=f"atend_{i}")
-        with col3:
-            tempo = st.text_input(f"Tempo médio (hh:mm) {i+1}", key=f"tempo_{i}")
-        erros = st.number_input(f"Quantidade de erros {i+1}", min_value=0, key=f"erros_{i}")
+col_esquerda, col_direita = st.columns([2, 3])
 
-        tempo_convertido = tempo_para_minutos(tempo)
+with col_esquerda:
+    st.header("Cadastro de Dados")
+    for i in range(1, 26):
+        estilo = "gray-dark" if i % 2 != 0 else "gray-light"
+        with st.container():
+            st.markdown(f'<div class="{estilo}">', unsafe_allow_html=True)
+            nome = st.text_input(f"Colaborador {i} - Nome", key=f"nome_{i}")
+            atendimentos = st.number_input("Nº de atendimentos", min_value=0, key=f"atend_{i}")
+            tempo = st.text_input("Tempo médio de atendimento (mm:ss)", value="00:00", key=f"tempo_{i}")
+            erros = st.number_input("Quantidade de erros", min_value=0, key=f"erros_{i}")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        if nome:
-            produtividade = atendimentos
-            eficiencia = (atendimentos / tempo_convertido) * 60 if tempo_convertido > 0 else 0
-            qualidade = 100 - ((erros / atendimentos) * 100) if atendimentos > 0 else 100
-            performance = (produtividade * 0.4) + (eficiencia * 0.3) + (qualidade * 0.3)
-
-            colaboradoras.append({
+    if st.button("Salvar dados do período"):
+        registros = []
+        for i in range(1, 26):
+            nome = st.session_state.get(f"nome_{i}", "")
+            if nome.strip() == "":
+                continue
+            atendimentos = st.session_state.get(f"atend_{i}", 0)
+            tempo_txt = st.session_state.get(f"tempo_{i}", "00:00")
+            try:
+                minutos, segundos = map(int, tempo_txt.strip().split(":"))
+                tempo_total = minutos + segundos / 60
+            except:
+                tempo_total = 0
+            erros = st.session_state.get(f"erros_{i}", 0)
+            registros.append({
                 "Nome": nome,
-                "Produtividade": round(produtividade, 2),
-                "Eficiência": round(eficiencia, 2),
-                "Qualidade": round(qualidade, 2),
-                "Performance Final": round(performance, 2)
+                "Atendimentos": atendimentos,
+                "Tempo Médio (min)": tempo_total,
+                "Erros": erros
             })
+        st.session_state.dados_colaboradoras[chave] = registros
+        st.success("Dados salvos com sucesso!")
 
-        st.markdown("</div><br>", unsafe_allow_html=True)
+with col_direita:
+    st.header("Radar de Performance")
+    dados = st.session_state.dados_colaboradoras.get(chave, [])
+    for registro in dados:
+        nome = registro["Nome"]
+        atendimentos = registro["Atendimentos"]
+        tempo = registro["Tempo Médio (min)"]
+        erros = registro["Erros"]
 
-# Exibir os gráficos de radar se houver dados
-if colaboradoras:
-    st.subheader("Desempenho Individual")
-    for colaboradora in colaboradoras:
+        if atendimentos == 0:
+            produtividade = 0
+        else:
+            produtividade = min(atendimentos / 100, 1) * 100
+
+        eficiencia = max(0, 100 - tempo * 10)
+        qualidade = max(0, 100 - erros * 20)
+
+        performance = (produtividade + eficiencia + qualidade) / 3
+
         fig = go.Figure()
         fig.add_trace(go.Scatterpolar(
-            r=[colaboradora["Produtividade"], colaboradora["Eficiência"], colaboradora["Qualidade"], colaboradora["Performance Final"]],
-            theta=["Produtividade", "Eficiência", "Qualidade", "Performance Final"],
+            r=[produtividade, eficiencia, qualidade, produtividade],
+            theta=["Produtividade", "Eficiência", "Qualidade", "Produtividade"],
             fill='toself',
-            name=colaboradora["Nome"]
+            name=nome
         ))
-        fig.update_layout(polar=dict(radialaxis=dict(visible=True)), showlegend=True, title=colaboradora["Nome"])
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(visible=True, range=[0, 100])
+            ),
+            showlegend=True,
+            title=f"Desempenho de {nome}"
+        )
         st.plotly_chart(fig, use_container_width=True)
-
-    df = pd.DataFrame(colaboradoras)
-    st.subheader("Resumo Geral")
-    st.dataframe(df)
