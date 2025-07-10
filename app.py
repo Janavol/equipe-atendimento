@@ -1,71 +1,77 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import datetime
 
-st.set_page_config(page_title="Dashboard de Performance", layout="wide")
+# ----- CONFIGURAÇÕES INICIAIS -----
+st.set_page_config(page_title="Painel de Performance", layout="wide")
+st.sidebar.title("Preenchimento de Dados")
 
-st.title("Painel de Performance da Equipe de Atendimento")
-st.write("✅ App carregado com sucesso!")
+# ----- LISTAS E VARIÁVEIS -----
+colaboradoras = [f"Colab_{i}" for i in range(1, 21)]  # Até 20 colaboradoras
+anos_disponiveis = list(range(2024, datetime.now().year + 1))
+meses_disponiveis = {
+    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+    "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+}
 
-# Formulário de entrada de dados
-with st.sidebar.form(key='formulario'):
-    st.header("📋 Preenchimento de Dados")
-    nome = st.selectbox("Colaboradora:", ["Ana", "Beatriz", "Carla", "Daniela", "Eduarda"])
-    atendimentos = st.number_input("Número de atendimentos:", min_value=0, step=1)
-    tempo_medio = st.number_input("Tempo médio por atendimento (min):", min_value=0.0, step=0.1)
-    erros = st.number_input("Número de erros:", min_value=0, step=1)
-    submitted = st.form_submit_button("Enviar")
+# ----- ENTRADAS -----
+colab_nome = st.sidebar.selectbox("Selecione a colaboradora", colaboradoras)
+ano_selecionado = st.sidebar.selectbox("Ano", anos_disponiveis, index=len(anos_disponiveis)-1)
+mes_selecionado = st.sidebar.selectbox("Mês", list(meses_disponiveis.keys()), index=datetime.now().month-1)
 
-# Inicializa ou carrega o DataFrame
-if "dados" not in st.session_state:
-    st.session_state.dados = pd.DataFrame(columns=["Nome", "Atendimentos", "Tempo Médio", "Erros", "Produtividade", "Eficiência", "Qualidade", "Performance Final"])
+# Entrada de dados
+atendimentos = st.sidebar.number_input("Nº de Atendimentos", min_value=0, step=1)
+tempo_medio = st.sidebar.number_input("Tempo Médio por Atendimento (min)", min_value=0.0, step=0.1)
+erros = st.sidebar.number_input("Nº de Erros", min_value=0, step=1)
 
-# Cálculo das métricas
-def calcular_metricas(atendimentos, tempo_medio, erros):
-    produtividade = min(atendimentos / 100, 1)
-    eficiencia = max(1 - (tempo_medio / 30), 0)
-    qualidade = max(1 - (erros / 10), 0)
-    performance = round(((produtividade + eficiencia + qualidade) / 3) * 100, 2)
-    return produtividade, eficiencia, qualidade, performance
-
-# Salva os dados após submissão
-if submitted:
-    produtividade, eficiencia, qualidade, performance = calcular_metricas(atendimentos, tempo_medio, erros)
-    novo_dado = {
-        "Nome": nome,
+# Botão para enviar
+if st.sidebar.button("Salvar Dados"):
+    dados = {
+        "Ano": ano_selecionado,
+        "Mês": mes_selecionado,
+        "Colaboradora": colab_nome,
         "Atendimentos": atendimentos,
         "Tempo Médio": tempo_medio,
-        "Erros": erros,
-        "Produtividade": round(produtividade, 2),
-        "Eficiência": round(eficiencia, 2),
-        "Qualidade": round(qualidade, 2),
-        "Performance Final": performance
+        "Erros": erros
     }
-    st.session_state.dados = pd.concat([st.session_state.dados, pd.DataFrame([novo_dado])], ignore_index=True)
-    st.success("Dados salvos com sucesso!")
+    st.session_state.setdefault("dados", []).append(dados)
+    st.sidebar.success("Dados salvos!")
 
-# Exibe a tabela atualizada
-if not st.session_state.dados.empty:
-    st.subheader("📊 Tabela de Dados")
-    st.dataframe(st.session_state.dados, use_container_width=True)
+# ----- ANÁLISE -----
+st.title("Painel de Performance da Equipe de Atendimento")
 
-    st.subheader("📈 Gráficos de Radar")
-    for _, row in st.session_state.dados.iterrows():
-        fig = go.Figure()
+if "dados" not in st.session_state or not st.session_state["dados"]:
+    st.info("Nenhum dado registrado ainda.")
+else:
+    df = pd.DataFrame(st.session_state["dados"])
 
-        fig.add_trace(go.Scatterpolar(
-            r=[row["Produtividade"], row["Eficiência"], row["Qualidade"]],
-            theta=["Produtividade", "Eficiência", "Qualidade"],
-            fill='toself',
-            name=row["Nome"]
-        ))
+    # Filtro por mês e ano
+    df_filtrado = df[(df["Ano"] == ano_selecionado) & (df["Mês"] == mes_selecionado)]
 
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 1])
-            ),
-            showlegend=True,
-            title=f"Desempenho de {row['Nome']}"
-        )
-        st.plotly_chart(fig, use_container_width=True)
- 
+    if df_filtrado.empty:
+        st.warning("Nenhum dado para este período.")
+    else:
+        for nome in df_filtrado["Colaboradora"].unique():
+            colab_df = df_filtrado[df_filtrado["Colaboradora"] == nome]
+
+            # Métricas
+            produtividade = colab_df["Atendimentos"].mean()
+            eficiencia = 100 - colab_df["Tempo Médio"].mean()
+            qualidade = max(0, 100 - (colab_df["Erros"].mean() * 10))
+            performance_final = (produtividade + eficiencia + qualidade) / 3
+
+            # Radar chart
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=[produtividade, eficiencia, qualidade, performance_final],
+                theta=["Produtividade", "Eficiência", "Qualidade", "Performance Final"],
+                fill='toself',
+                name=nome
+            ))
+            fig.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                showlegend=True,
+                title=f"Performance - {nome} ({mes_selecionado}/{ano_selecionado})"
+            )
+            st.plotly_chart(fig, use_container_width=True)
