@@ -5,6 +5,10 @@ from datetime import datetime
 from fpdf import FPDF
 import base64
 import io
+import locale
+
+# Define locale para português
+locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 
 st.set_page_config(layout="wide")
 
@@ -37,7 +41,7 @@ col1, col2 = st.columns(2)
 with col1:
     ano = st.selectbox("Selecione o ano:", [2025, 2026], key="ano")
 with col2:
-    mes = st.selectbox("Selecione o mês:", list(range(1, 13)), format_func=lambda m: datetime(2025, m, 1).strftime("%B"), key="mes")
+    mes = st.selectbox("Selecione o mês:", list(range(1, 13)), format_func=lambda m: datetime(2025, m, 1).strftime("%B").capitalize(), key="mes")
 
 chave = f"{ano}-{mes}"
 
@@ -90,28 +94,29 @@ with col_direita:
 
     if dados:
         relatorio_final = []
+
+        media_atendimentos = sum(d["Atendimentos"] for d in dados) / len(dados)
+        media_tempo = sum(d["Tempo Médio (min)"] for d in dados) / len(dados)
+        media_erros = sum(d["Erros"] for d in dados) / len(dados) if any(d["Erros"] > 0 for d in dados) else 0.1
+
         for registro in dados:
             nome = registro["Nome"]
             atendimentos = registro["Atendimentos"]
             tempo = registro["Tempo Médio (min)"]
             erros = registro["Erros"]
 
-            if atendimentos == 0:
-                produtividade = 0
-            else:
-                produtividade = min(atendimentos / 100, 1) * 100
+            produtividade = (atendimentos / media_atendimentos * 100) if media_atendimentos else 0
+            eficiencia = (media_tempo / tempo * 100) if tempo else 0
+            qualidade = (media_erros / erros * 100) if erros else 100
 
-            eficiencia = max(0, 100 - tempo * 10)
-            qualidade = max(0, 100 - erros * 20)
-            performance = (produtividade + eficiencia + qualidade) / 3
+            performance = produtividade * 0.4 + eficiencia * 0.3 + qualidade * 0.3
 
-            # Adiciona título com mês e ano
-            st.subheader(f"{datetime(ano, mes, 1).strftime('%B %Y')} - {nome}")
+            st.subheader(f"{datetime(ano, mes, 1).strftime('%B de %Y').capitalize()} - {nome}")
 
             fig = go.Figure()
             fig.add_trace(go.Scatterpolar(
-                r=[produtividade, eficiencia, qualidade, produtividade],
-                theta=["Produtividade", "Eficiência", "Qualidade", "Produtividade"],
+                r=[produtividade, eficiencia, qualidade, performance, produtividade],
+                theta=["Produtividade", "Eficiência", "Qualidade", "Performance", "Produtividade"],
                 fill='toself',
                 name=nome
             ))
@@ -124,32 +129,29 @@ with col_direita:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Análise de capacitação
             necessidades = []
-            if produtividade < 70:
+            if produtividade < 100:
                 necessidades.append("produtividade")
-            if eficiencia < 70:
+            if eficiencia < 100:
                 necessidades.append("eficiência")
-            if qualidade < 70:
+            if qualidade < 100:
                 necessidades.append("qualidade")
 
             if necessidades:
-                st.markdown(f"<b>{nome}:</b> necessita de capacitação em {', '.join(necessidades)}.", unsafe_allow_html=True)
+                st.markdown(f"<b>{nome}:</b> necessita de capacitação em {', '.join(necessidades)}. 📚", unsafe_allow_html=True)
                 relatorio_final.append(f"{nome}, capacitação em {', '.join(necessidades)}")
 
-        # Exibir relatório geral
         if relatorio_final:
             st.subheader("Relatório Geral de Capacitação")
-            st.markdown(f"Com base nos dados analisados durante o mês de <b>{datetime(ano, mes, 1).strftime('%B de %Y')}</b>, necessitam de aperfeiçoamento os seguintes colaboradores:", unsafe_allow_html=True)
+            st.markdown(f"Com base nos dados analisados durante o mês de <b>{datetime(ano, mes, 1).strftime('%B de %Y').capitalize()}</b>, necessitam de aperfeiçoamento os seguintes colaboradores:", unsafe_allow_html=True)
             for linha in relatorio_final:
                 st.markdown(f"- {linha}")
 
-        # Gerar PDF da tabela e gráficos (apenas dados)
         if st.button("Exportar dados para PDF"):
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt=f"Relatório de Desempenho - {datetime(ano, mes, 1).strftime('%B/%Y')}", ln=True, align='C')
+            pdf.cell(200, 10, txt=f"Relatório de Desempenho - {datetime(ano, mes, 1).strftime('%B/%Y').capitalize()}", ln=True, align='C')
             pdf.ln(10)
 
             for reg in dados:
